@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"io"
+	"net/http"
 
 	"github.com/http-wasm/http-wasm-host-go/api"
 )
@@ -164,6 +165,9 @@ type Host interface {
 
 	// GetSourceAddr supports the WebAssembly function export FuncGetSourceAddr.
 	GetSourceAddr(ctx context.Context) string
+
+	// HTTPRequest supports the WebAssembly function export FuncGetSourceAddr.
+	HTTPRequest(ctx context.Context, method, uri, body string) (uint32, []byte, http.Header, error)
 }
 
 // eofReader is safer than reading from os.DevNull as it can never overrun
@@ -210,3 +214,6 @@ func (UnimplementedHost) SetResponseTrailerValue(context.Context, string, string
 func (UnimplementedHost) AddResponseTrailerValue(context.Context, string, string)            {}
 func (UnimplementedHost) RemoveResponseTrailer(context.Context, string)                      {}
 func (UnimplementedHost) GetSourceAddr(context.Context) string                               { return "1.1.1.1:12345" }
+func (UnimplementedHost) HTTPRequest(context.Context, string, string, string) (uint32, []byte, http.Header, error) {
+	return 200, nil, nil, nil
+}

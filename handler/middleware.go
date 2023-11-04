@@ -3,8 +3,10 @@ package handler
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -576,6 +578,57 @@ func (m *middleware) getSourceAddr(ctx context.Context, mod wazeroapi.Module, st
 	stack[0] = uint64(methodLen)
 }
 
+// httpRequest implements the WebAssembly host function handler.FuncHTTPRequest.
+func (m *middleware) httpRequest(ctx context.Context, mod wazeroapi.Module, stack []uint64) {
+	buf := uint32(stack[0])
+	bufLimit := handler.BufLimit(stack[1])
+	method := uint32(stack[2])
+	methodLen := uint32(stack[3])
+	uri := uint32(stack[4])
+	uriLen := uint32(stack[5])
+	requestBody := uint32(stack[6])
+	requestBodyLen := uint32(stack[7])
+	respBody := uint32(stack[8])
+	respBodyLimit := uint32(stack[9])
+
+	if methodLen == 0 {
+		panic("HTTP method cannot be empty")
+	}
+	if uriLen == 0 {
+		panic("HTTP uri cannot be empty")
+	}
+
+	meth := mustReadString(mod.Memory(), "method", method, methodLen)
+	u := mustReadString(mod.Memory(), "uri", uri, uriLen)
+	b := mustReadString(mod.Memory(), "body", requestBody, requestBodyLen)
+
+	code, tmpRespBody, headers, err := m.host.HTTPRequest(ctx, meth, u, b)
+	bodyResponse := writeStringIfUnderLimit(mod.Memory(), respBody, respBodyLimit, string(tmpRespBody))
+	if err != nil {
+		bodyResponse = writeStringIfUnderLimit(mod.Memory(), respBody, respBodyLimit, err.Error())
+	}
+
+	type httpResponse struct {
+		Code    uint32
+		Body    uint32
+		Headers http.Header
+	}
+
+	data := httpResponse{
+		Code:    code,
+		Body:    bodyResponse,
+		Headers: headers,
+	}
+
+	asBytes, err := json.Marshal(data)
+	if err != nil {
+		panic(err)
+	}
+
+	response := writeStringIfUnderLimit(mod.Memory(), buf, bufLimit, string(asBytes))
+	stack[0] = uint64(response)
+}
+
 func writeBody(mod wazeroapi.Module, buf, bufLen uint32, w io.Writer) {
 	// buf_len 0 means to overwrite with nothing
 	var b []byte
@@ -707,6 +760,9 @@ func (m *middleware) instantiateHost(ctx context.Context) (wazeroapi.Module, err
 		NewFunctionBuilder().
 		WithGoModuleFunction(wazeroapi.GoModuleFunc(m.getSourceAddr), []wazeroapi.ValueType{i32, i32}, []wazeroapi.ValueType{i32}).
 		WithParameterNames("buf", "buf_limit").Export(handler.FuncGetSourceAddr).
+		NewFunctionBuilder().
+		WithGoModuleFunction(wazeroapi.GoModuleFunc(m.httpRequest), []wazeroapi.ValueType{i32, i32, i32, i32, i32, i32, i32, i32, i32, i32}, []wazeroapi.ValueType{i32}).
+		WithParameterNames("buf", "buf_limit", "method", "method_len", "uri", "uri_len", "body", "body_len", "resp", "resp_limit").Export(handler.FuncHTTPRequest).
 		NewFunctionBuilder().
 		WithGoFunction(wazeroapi.GoFunc(m.getStatusCode), []wazeroapi.ValueType{}, []wazeroapi.ValueType{i32}).
 		WithParameterNames().Export(handler.FuncGetStatusCode).

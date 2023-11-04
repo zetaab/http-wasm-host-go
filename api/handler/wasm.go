@@ -322,4 +322,7 @@ const (
 	//
 	// TODO: document on http-wasm-abi
 	FuncGetSourceAddr = "get_source_addr"
+
+	// FuncHTTPRequest ...
+	FuncHTTPRequest = "http_request"
 )

@@ -352,3 +352,28 @@ func (host) GetSourceAddr(ctx context.Context) string {
 	r := requestStateFromContext(ctx).r
 	return r.RemoteAddr
 }
+
+// HTTPRequest implements the same method as documented on handler.Host.
+func (host) HTTPRequest(ctx context.Context, method string, uri string, body string) (uint32, []byte, http.Header, error) {
+	var reader io.Reader
+	if body != "" {
+		reader = strings.NewReader(body)
+	}
+	req, err := http.NewRequest(method, uri, reader)
+	if err != nil {
+		return 0, nil, nil, err
+	}
+
+	// TODO this is missing request header support, request headers needs to be inserted to host using json or similar
+	c := &http.Client{}
+	resp, err := c.Do(req)
+	if err != nil {
+		return 0, nil, nil, err
+	}
+	defer resp.Body.Close()
+	content, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, nil, nil, err
+	}
+	return uint32(resp.StatusCode), content, resp.Header, nil
+}
