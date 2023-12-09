@@ -10,7 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/stealthrocket/wasi-go/imports/wasi_http"
+	whttp "github.com/stealthrocket/wasi-go/imports/wasi_http"
 	"github.com/tetratelabs/wazero"
 	wazeroapi "github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
@@ -87,13 +87,14 @@ func NewMiddleware(ctx context.Context, guest []byte, host handler.Host, opts ..
 		logger:       o.logger,
 	}
 
-	if m.guestModule, err = m.compileGuest(ctx, guest); err != nil {
-		_ = wr.Close(ctx)
+	wasiHTTP := whttp.MakeWasiHTTP("v1")
+	if err := wasiHTTP.Instantiate(ctx, m.runtime); err != nil {
 		return nil, err
 	}
+	fmt.Printf("%+v\n", m.runtime)
 
-	wasiHTTP := wasi_http.MakeWasiHTTP()
-	if err := wasiHTTP.Instantiate(ctx, m.runtime); err != nil {
+	if m.guestModule, err = m.compileGuest(ctx, guest); err != nil {
+		_ = wr.Close(ctx)
 		return nil, err
 	}
 
